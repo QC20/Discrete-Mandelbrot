@@ -15,10 +15,11 @@ void main() {
 
   // -------------------------------------------------------
   // DISCRETE BLOCK AESTHETIC
-  // Snap each fragment to the nearest 4x4 pixel cell centre,
-  // creating a more prominent blocky visual language.
+  // Snap each fragment to the nearest 8x8 pixel cell centre,
+  // creating a distinctly blocky visual language as the
+  // smallest discrete computational unit.
   // -------------------------------------------------------
-  float GRID = 4.0;
+  float GRID = 8.0;
   vec2 snapped = floor(gl_FragCoord.xy / GRID) * GRID + GRID * 0.5;
 
   // -------------------------------------------------------

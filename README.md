@@ -1,5 +1,9 @@
 # Discrete Mandelbrot
 
+<div style="text-align: center; margin: 20px 0;">
+  <img src="src/assets/example-image-mandelbrot.png" alt="Discrete Mandelbrot Set Visualization" style="width: 35%; max-width: 500px; height: auto;">
+</div>
+
 An interactive GPU-accelerated explorer of the Mandelbrot set rendered with a distinct blocky aesthetic. Rather than plotting individual pixels, this tool snaps calculations to 2x2 pixel blocks, creating a discrete visual language that transforms the infinite fractal into something more graphic and geometric.
 
 ## What it is
