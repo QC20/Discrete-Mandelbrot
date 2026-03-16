@@ -8,6 +8,7 @@ let zoomEasing = 0.08;
 let rotationAngle = 0.0;
 let targetRotationAngle = 0.0;
 let rotationEasing = 0.1;
+let rotationSensitivity = 0.25; // dampen rotation so trackpad circles feel controlled
 
 // Touch gesture tracking
 let prevTouchDist = null;
@@ -19,6 +20,9 @@ let activeTouches = [];
 let gestureActive = false;
 let gestureStartRotation = 0.0;
 let gestureStartZoom = 1.0;
+
+// Pan speed multiplier (applied everywhere panning occurs)
+let panSpeed = 0.444;
 
 function preload() {
   mandel = loadShader('src/shaders/shader.vert', 'src/shaders/shader.frag');
@@ -34,20 +38,24 @@ function setup() {
   shader(mandel);
   noStroke();
 
-  // Prevent default touch behaviour so gestures work without
-  // the page scrolling or zooming underneath the canvas
   let cnv = document.querySelector('canvas');
 
+  // Prevent default touch behaviour so gestures do not
+  // scroll or zoom the page underneath the canvas
   cnv.addEventListener('touchstart', handleTouchStart, { passive: false });
   cnv.addEventListener('touchmove', handleTouchMove, { passive: false });
   cnv.addEventListener('touchend', handleTouchEnd, { passive: false });
   cnv.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
-  // Safari/WebKit gesture events (Mac trackpad rotation + pinch,
-  // and iOS Safari two-finger gestures)
+  // Safari/WebKit gesture events (Mac trackpad + iOS Safari)
   cnv.addEventListener('gesturestart', handleGestureStart, { passive: false });
   cnv.addEventListener('gesturechange', handleGestureChange, { passive: false });
   cnv.addEventListener('gestureend', handleGestureEnd, { passive: false });
+
+  // Chrome/Firefox on desktop: trackpad pinch fires as wheel
+  // events with ctrlKey held. We intercept those here so that
+  // Chrome does not zoom the page and our fractal zooms instead.
+  cnv.addEventListener('wheel', handleWheel, { passive: false });
 }
 
 function draw() {
@@ -69,41 +77,55 @@ function windowResized() {
 }
 
 // -------------------------------------------------------
-// MOUSE WHEEL (desktop scroll zoom, unchanged)
+// WHEEL (unified handler for all desktop browsers)
+// Chrome/Firefox encode trackpad pinch as wheel + ctrlKey.
+// Regular scroll wheel also lands here.
+// We call preventDefault to stop Chrome zooming the page.
 // -------------------------------------------------------
-function mouseWheel(event) {
-  if (event.delta > 0) {
-    targetZoomRatio /= 1.0116;
+function handleWheel(e) {
+  e.preventDefault();
+
+  if (e.ctrlKey) {
+    // Trackpad pinch gesture (Chrome, Firefox, Edge)
+    let zoomFactor = 1 - e.deltaY * 0.01;
+    targetZoomRatio *= zoomFactor;
+    if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
   } else {
-    targetZoomRatio *= 1.0116;
+    // Normal scroll wheel
+    if (e.deltaY > 0) {
+      targetZoomRatio /= 1.0116;
+    } else {
+      targetZoomRatio *= 1.0116;
+    }
+    if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
   }
-  if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
+}
+
+// Disable p5's built-in mouseWheel since handleWheel covers it
+function mouseWheel(event) {
+  // Intentionally empty: handled by handleWheel on the canvas
 }
 
 // -------------------------------------------------------
-// MOUSE DRAG (desktop pan, unchanged)
+// MOUSE DRAG (desktop pan)
 // -------------------------------------------------------
 function mouseDragged() {
-  // Skip mouse-drag panning when a touch gesture is active,
-  // because p5 fires mouseDragged for single-finger touch too
   if (activeTouches.length > 0) return;
 
   let aspect = width / height;
   let dx = (mouseX - pmouseX) / width;
   let dy = (mouseY - pmouseY) / height;
 
-  // Pan must respect the current rotation so dragging feels
-  // natural relative to the visible orientation
   let cosR = Math.cos(rotationAngle);
   let sinR = Math.sin(rotationAngle);
-  let rawDx = 0.222 / zoomRatio * dx * aspect;
-  let rawDy = 0.222 / zoomRatio * dy;
+  let rawDx = panSpeed / zoomRatio * dx * aspect;
+  let rawDy = panSpeed / zoomRatio * dy;
   centerPosition[0] -= rawDx * cosR + rawDy * sinR;
   centerPosition[1] += -rawDx * sinR + rawDy * cosR;
 }
 
 // -------------------------------------------------------
-// KEYBOARD (arrows + rotation with [ ] or R/L keys)
+// KEYBOARD (arrows, zoom, rotation with [ ] and reset with 0)
 // -------------------------------------------------------
 function keyPressed() {
   let d = (4.0 / 9.0) / zoomRatio / 40.0;
@@ -122,15 +144,11 @@ function keyPressed() {
     targetZoomRatio /= 1.0228;
     if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
   }
-
-  // Rotation via keyboard: [ and ] brackets, or < and >
   if (key === '[' || key === ',') {
     targetRotationAngle -= 0.05;
   } else if (key === ']' || key === '.') {
     targetRotationAngle += 0.05;
   }
-
-  // Reset rotation with 0 key
   if (key === '0') {
     targetRotationAngle = 0.0;
   }
@@ -138,10 +156,7 @@ function keyPressed() {
 
 // -------------------------------------------------------
 // SAFARI / WEBKIT GESTURE EVENTS
-// These fire on Mac trackpad (two-finger rotate and pinch)
-// and on iOS Safari (two-finger gestures).
-// When these are available they give the cleanest data,
-// so we prefer them and skip the manual touch math.
+// Mac trackpad and iOS Safari two-finger rotate + pinch.
 // -------------------------------------------------------
 function handleGestureStart(e) {
   e.preventDefault();
@@ -153,10 +168,10 @@ function handleGestureStart(e) {
 function handleGestureChange(e) {
   e.preventDefault();
 
-  // e.rotation is cumulative degrees since gesturestart
-  targetRotationAngle = gestureStartRotation + (e.rotation * Math.PI / 180);
+  // Apply rotation sensitivity so trackpad circles feel controlled
+  let rotationDeg = e.rotation * Math.PI / 180;
+  targetRotationAngle = gestureStartRotation + rotationDeg * rotationSensitivity;
 
-  // e.scale is cumulative scale factor since gesturestart
   let newZoom = gestureStartZoom * e.scale;
   if (newZoom < 1.0) newZoom = 1.0;
   targetZoomRatio = newZoom;
@@ -168,9 +183,12 @@ function handleGestureEnd(e) {
 }
 
 // -------------------------------------------------------
-// GENERIC TOUCH EVENTS (fallback for non-WebKit browsers,
-// e.g. Chrome/Firefox on Android or desktop)
-// Also handles single-finger pan on all touch devices.
+// GENERIC TOUCH EVENTS
+// Fallback for Chrome/Firefox on Android. Also handles
+// single-finger pan on all touch devices.
+// On iOS, Chrome uses WebKit under the hood so Safari
+// gesture events fire there too, but these provide a
+// safety net regardless.
 // -------------------------------------------------------
 function handleTouchStart(e) {
   e.preventDefault();
@@ -187,12 +205,18 @@ function handleTouchStart(e) {
 
 function handleTouchMove(e) {
   e.preventDefault();
+  // Enrich touches with stored previous positions
+  for (let t of e.touches) {
+    if (_touchPrevMap[t.identifier]) {
+      t._prevX = _touchPrevMap[t.identifier].x;
+      t._prevY = _touchPrevMap[t.identifier].y;
+    }
+  }
   activeTouches = Array.from(e.touches);
 
   if (activeTouches.length === 1 && !gestureActive) {
     // Single finger: pan
     let t = activeTouches[0];
-    // We need a previous position; store it on the touch object
     if (t._prevX !== undefined) {
       let dx = (t.clientX - t._prevX) / width;
       let dy = (t.clientY - t._prevY) / height;
@@ -200,14 +224,11 @@ function handleTouchMove(e) {
 
       let cosR = Math.cos(rotationAngle);
       let sinR = Math.sin(rotationAngle);
-      let rawDx = 0.222 / zoomRatio * dx * aspect;
-      let rawDy = 0.222 / zoomRatio * dy;
+      let rawDx = panSpeed / zoomRatio * dx * aspect;
+      let rawDy = panSpeed / zoomRatio * dy;
       centerPosition[0] -= rawDx * cosR + rawDy * sinR;
       centerPosition[1] += -rawDx * sinR + rawDy * cosR;
     }
-    // Store for next frame (touch objects are recreated each event,
-    // so we tag the identifier-based position in a small map)
-    storeTouchPrev(t);
 
   } else if (activeTouches.length === 2 && !gestureActive) {
     // Two fingers: rotate + pinch-zoom + pan
@@ -224,12 +245,11 @@ function handleTouchMove(e) {
       targetZoomRatio *= scaleFactor;
       if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
 
-      // Rotation (angle delta)
+      // Rotation with damping
       let angleDelta = angle - prevTouchAngle;
-      // Normalise to [-PI, PI] to avoid jumps when fingers cross axes
       while (angleDelta > Math.PI) angleDelta -= 2 * Math.PI;
       while (angleDelta < -Math.PI) angleDelta += 2 * Math.PI;
-      targetRotationAngle += angleDelta;
+      targetRotationAngle += angleDelta * rotationSensitivity;
 
       // Two-finger pan
       if (prevTouchCenter !== null) {
@@ -239,8 +259,8 @@ function handleTouchMove(e) {
 
         let cosR = Math.cos(rotationAngle);
         let sinR = Math.sin(rotationAngle);
-        let rawDx = 0.222 / zoomRatio * dx * aspect;
-        let rawDy = 0.222 / zoomRatio * dy;
+        let rawDx = panSpeed / zoomRatio * dx * aspect;
+        let rawDy = panSpeed / zoomRatio * dy;
         centerPosition[0] -= rawDx * cosR + rawDy * sinR;
         centerPosition[1] += -rawDx * sinR + rawDy * cosR;
       }
@@ -249,6 +269,11 @@ function handleTouchMove(e) {
     prevTouchDist = dist;
     prevTouchAngle = angle;
     prevTouchCenter = center;
+  }
+
+  // Store positions for next frame
+  for (let t of e.touches) {
+    _touchPrevMap[t.identifier] = { x: t.clientX, y: t.clientY };
   }
 }
 
@@ -260,7 +285,12 @@ function handleTouchEnd(e) {
     prevTouchAngle = null;
     prevTouchCenter = null;
   }
-  clearTouchPrev();
+  // Clean up identifiers that are no longer active
+  let activeIds = new Set();
+  for (let t of e.touches) activeIds.add(t.identifier);
+  for (let id in _touchPrevMap) {
+    if (!activeIds.has(Number(id))) delete _touchPrevMap[id];
+  }
 }
 
 // -------------------------------------------------------
@@ -283,31 +313,5 @@ function touchCenter(t0, t1) {
   };
 }
 
-// Simple map to track previous touch positions for single-finger pan
+// Map to track previous touch positions for single-finger pan
 let _touchPrevMap = {};
-function storeTouchPrev(t) {
-  _touchPrevMap[t.identifier] = { x: t.clientX, y: t.clientY };
-  // Attach to next event's touch by reading the map
-  t._prevX = _touchPrevMap[t.identifier] ? _touchPrevMap[t.identifier].x : t.clientX;
-  t._prevY = _touchPrevMap[t.identifier] ? _touchPrevMap[t.identifier].y : t.clientY;
-}
-function clearTouchPrev() {
-  _touchPrevMap = {};
-}
-
-// Patch: on touchmove, look up previous position from the map
-let _origHandleTouchMove = handleTouchMove;
-handleTouchMove = function(e) {
-  // Enrich touches with previous positions before processing
-  for (let t of e.touches) {
-    if (_touchPrevMap[t.identifier]) {
-      t._prevX = _touchPrevMap[t.identifier].x;
-      t._prevY = _touchPrevMap[t.identifier].y;
-    }
-  }
-  _origHandleTouchMove(e);
-  // Update stored positions after processing
-  for (let t of e.touches) {
-    _touchPrevMap[t.identifier] = { x: t.clientX, y: t.clientY };
-  }
-};
