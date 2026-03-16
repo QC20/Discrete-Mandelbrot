@@ -15,10 +15,10 @@ void main() {
 
   // -------------------------------------------------------
   // DISCRETE BLOCK AESTHETIC
-  // Snap each fragment to the nearest 2x2 pixel cell centre,
-  // exactly replicating the original "x += 2, y += 2" loop.
+  // Snap each fragment to the nearest 4x4 pixel cell centre,
+  // creating a more prominent blocky visual language.
   // -------------------------------------------------------
-  float GRID = 2.0;
+  float GRID = 4.0;
   vec2 snapped = floor(gl_FragCoord.xy / GRID) * GRID + GRID * 0.5;
 
   // -------------------------------------------------------

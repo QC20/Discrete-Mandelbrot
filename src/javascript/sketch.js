@@ -1,6 +1,8 @@
 let mandel;
 let centerPosition;
 let zoomRatio;
+let targetZoomRatio;
+let zoomEasing = 0.08; // smoothness factor for zoom transitions (0.08 = smooth organic feel)
 
 function preload() {
   mandel = loadShader('src/shaders/shader.vert', 'src/shaders/shader.frag');
@@ -12,11 +14,15 @@ function setup() {
   frameRate(30);
   centerPosition = [-0.5, 0.0];
   zoomRatio = 1.0;
+  targetZoomRatio = 1.0;
   shader(mandel);
   noStroke();
 }
 
 function draw() {
+  // Smoothly interpolate zoomRatio towards targetZoomRatio
+  zoomRatio += (targetZoomRatio - zoomRatio) * zoomEasing;
+  
   mandel.setUniform('p', centerPosition);
   mandel.setUniform('r', 1.5 / zoomRatio);
   mandel.setUniform('resolution', [width, height]);
@@ -31,11 +37,11 @@ function windowResized() {
 
 function mouseWheel(event) {
   if (event.delta > 0) {
-    zoomRatio /= 1.1;
+    targetZoomRatio /= 1.07;
   } else {
-    zoomRatio *= 1.1;
+    targetZoomRatio *= 1.07;
   }
-  if (zoomRatio < 1.0) zoomRatio = 1.0;
+  if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
 }
 
 function mouseDragged() {
@@ -58,9 +64,9 @@ function keyPressed() {
     centerPosition[1] += d;
   }
   if (key === '+') {
-    zoomRatio *= 1.2;
+    targetZoomRatio *= 1.14;
   } else if (key === '-') {
-    zoomRatio /= 1.2;
-    if (zoomRatio < 1.0) zoomRatio = 1.0;
+    targetZoomRatio /= 1.14;
+    if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
   }
 }
