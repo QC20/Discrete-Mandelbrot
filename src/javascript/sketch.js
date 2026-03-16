@@ -1,5 +1,8 @@
 let mandel;
 let centerPosition;
+let targetCenterPosition;
+let panEasing = 0.15;
+
 let zoomRatio;
 let targetZoomRatio;
 let zoomEasing = 0.08;
@@ -22,7 +25,7 @@ let gestureStartRotation = 0.0;
 let gestureStartZoom = 1.0;
 
 // Pan speed multiplier (applied everywhere panning occurs)
-let panSpeed = 0.888;
+let panSpeed = 0.888 * 2.5;
 
 function preload() {
   mandel = loadShader('src/shaders/shader.vert', 'src/shaders/shader.frag');
@@ -33,6 +36,7 @@ function setup() {
   pixelDensity(1);
   frameRate(30);
   centerPosition = [-0.5, 0.0];
+  targetCenterPosition = [-0.5, 0.0];
   zoomRatio = 1.0;
   targetZoomRatio = 1.0;
   shader(mandel);
@@ -59,9 +63,11 @@ function setup() {
 }
 
 function draw() {
-  // Smooth interpolation for zoom and rotation
+  // Smooth interpolation for zoom, rotation, and panning
   zoomRatio += (targetZoomRatio - zoomRatio) * zoomEasing;
   rotationAngle += (targetRotationAngle - rotationAngle) * rotationEasing;
+  centerPosition[0] += (targetCenterPosition[0] - centerPosition[0]) * panEasing;
+  centerPosition[1] += (targetCenterPosition[1] - centerPosition[1]) * panEasing;
 
   mandel.setUniform('p', centerPosition);
   mandel.setUniform('r', 1.5 / zoomRatio);
@@ -120,23 +126,24 @@ function mouseDragged() {
   let sinR = Math.sin(rotationAngle);
   let rawDx = panSpeed / zoomRatio * dx * aspect;
   let rawDy = panSpeed / zoomRatio * dy;
-  centerPosition[0] -= rawDx * cosR + rawDy * sinR;
-  centerPosition[1] += -rawDx * sinR + rawDy * cosR;
+  targetCenterPosition[0] -= rawDx * cosR + rawDy * sinR;
+  targetCenterPosition[1] += -rawDx * sinR + rawDy * cosR;
 }
 
 // -------------------------------------------------------
 // KEYBOARD (arrows, zoom, rotation with [ ] and reset with 0)
 // -------------------------------------------------------
 function keyPressed() {
-  let d = (4.0 / 9.0) / zoomRatio / 40.0;
+  // 2.5x faster than original by folding the multiplier into the base step
+  let d = (4.0 / 9.0) / zoomRatio / 16.0;
   if (keyCode === LEFT_ARROW) {
-    centerPosition[0] += d;
+    targetCenterPosition[0] += d;
   } else if (keyCode === RIGHT_ARROW) {
-    centerPosition[0] -= d;
+    targetCenterPosition[0] -= d;
   } else if (keyCode === UP_ARROW) {
-    centerPosition[1] -= d;
+    targetCenterPosition[1] -= d;
   } else if (keyCode === DOWN_ARROW) {
-    centerPosition[1] += d;
+    targetCenterPosition[1] += d;
   }
   if (key === '+') {
     targetZoomRatio *= 1.0228;
@@ -226,8 +233,8 @@ function handleTouchMove(e) {
       let sinR = Math.sin(rotationAngle);
       let rawDx = panSpeed / zoomRatio * dx * aspect;
       let rawDy = panSpeed / zoomRatio * dy;
-      centerPosition[0] -= rawDx * cosR + rawDy * sinR;
-      centerPosition[1] += -rawDx * sinR + rawDy * cosR;
+      targetCenterPosition[0] -= rawDx * cosR + rawDy * sinR;
+      targetCenterPosition[1] += -rawDx * sinR + rawDy * cosR;
     }
 
   } else if (activeTouches.length === 2 && !gestureActive) {
@@ -261,8 +268,8 @@ function handleTouchMove(e) {
         let sinR = Math.sin(rotationAngle);
         let rawDx = panSpeed / zoomRatio * dx * aspect;
         let rawDy = panSpeed / zoomRatio * dy;
-        centerPosition[0] -= rawDx * cosR + rawDy * sinR;
-        centerPosition[1] += -rawDx * sinR + rawDy * cosR;
+        targetCenterPosition[0] -= rawDx * cosR + rawDy * sinR;
+        targetCenterPosition[1] += -rawDx * sinR + rawDy * cosR;
       }
     }
 
