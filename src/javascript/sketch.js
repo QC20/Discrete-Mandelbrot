@@ -22,7 +22,7 @@ let gestureStartRotation = 0.0;
 let gestureStartZoom = 1.0;
 
 // Pan speed multiplier (applied everywhere panning occurs)
-let panSpeed = 0.444;
+let panSpeed = 0.888;
 
 function preload() {
   mandel = loadShader('src/shaders/shader.vert', 'src/shaders/shader.frag');
