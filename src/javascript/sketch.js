@@ -37,9 +37,9 @@ function windowResized() {
 
 function mouseWheel(event) {
   if (event.delta > 0) {
-    targetZoomRatio /= 1.035;
+    targetZoomRatio /= 1.0116;
   } else {
-    targetZoomRatio *= 1.035;
+    targetZoomRatio *= 1.0116;
   }
   if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
 }
@@ -48,12 +48,12 @@ function mouseDragged() {
   let aspect = width / height;
   let dx = (mouseX - pmouseX) / width;
   let dy = (mouseY - pmouseY) / height;
-  centerPosition[0] -= (4.0 / 3.0) / zoomRatio * dx * aspect;
-  centerPosition[1] += (4.0 / 3.0) / zoomRatio * dy;
+  centerPosition[0] -= 0.222 / zoomRatio * dx * aspect;
+  centerPosition[1] += 0.222 / zoomRatio * dy;
 }
 
 function keyPressed() {
-  let d = (4.0 / 3.0) / zoomRatio / 40.0;
+  let d = (4.0 / 9.0) / zoomRatio / 40.0;
   if (keyCode === LEFT_ARROW) {
     centerPosition[0] += d;
   } else if (keyCode === RIGHT_ARROW) {
@@ -64,9 +64,9 @@ function keyPressed() {
     centerPosition[1] += d;
   }
   if (key === '+') {
-    targetZoomRatio *= 1.07;
+    targetZoomRatio *= 1.0228;
   } else if (key === '-') {
-    targetZoomRatio /= 1.07;
+    targetZoomRatio /= 1.0228;
     if (targetZoomRatio < 1.0) targetZoomRatio = 1.0;
   }
 }
