@@ -1,38 +1,66 @@
+let mandel;
+let centerPosition;
+let zoomRatio;
+
+function preload() {
+  mandel = loadShader('src/shaders/shader.vert', 'src/shaders/shader.frag');
+}
+
 function setup() {
-	 
-	createCanvas (600,600);
+  createCanvas(windowWidth, windowHeight, WEBGL);
+  pixelDensity(1); // keeps grid squares crisp and consistent across displays
+  frameRate(30);
+  centerPosition = [-0.5, 0.0];
+  zoomRatio = 1.0;
+  shader(mandel);
+  noStroke();
 }
 
 function draw() {
+  mandel.setUniform('p', centerPosition);
+  mandel.setUniform('r', 1.5 / zoomRatio);
+  mandel.setUniform('resolution', [width, height]);
+  quad(-1, -1, 1, -1, 1, 1, -1, 1);
+}
 
-	//visit every pixel
-	for (var x = 0; x <600; x += 2){
-		for (var y = 0; y <600; y += 2){
-			
-			// convert x,y to c = a + bi
-			var a = map(x, 0, 600, -1.75, 1.75);
-			var b = map(y, 0, 600, -1.75, 1.75);
-			
-			//start with z = 0 + 0i
-			var z_real = 0
-			var z_imag = 0
-			
-			//maximum iterations
-			var max_iter = 64;
-			
-			for (var iteration = 1; (iteration <= max_iter) && (dist(0,0, z_real, z_imag) < 2); iteration += 1) {
-				// apply z*z + c
-				var z_real_temp = (z_real * z_real * z_real * z_real) - (6 * z_real * z_real * z_imag * z_imag) + (z_imag * z_imag * z_imag * z_imag) + a;
-				z_imag = (4 * z_real * z_real * z_real * z_imag) - (4 * z_real * z_imag * z_imag * z_imag) + b;
-				z_real = z_real_temp;
-			}
-			
-			if (iteration == max_iter+1) {
-				stroke (0,0,0);
-				point (x,y);
-			}
-		
-		}
-	}
-	
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  shader(mandel); // re-bind after resize
+  noStroke();
+}
+
+function mouseWheel(event) {
+  if (event.delta > 0) {
+    zoomRatio /= 1.1;
+  } else {
+    zoomRatio *= 1.1;
+  }
+  if (zoomRatio < 1.0) zoomRatio = 1.0;
+}
+
+function mouseDragged() {
+  let aspect = width / height;
+  let dx = (mouseX - pmouseX) / width;
+  let dy = (mouseY - pmouseY) / height;
+  centerPosition[0] -= 2.0 / zoomRatio * dx * aspect;
+  centerPosition[1] += 2.0 / zoomRatio * dy;
+}
+
+function keyPressed() {
+  let d = 2.0 / zoomRatio / 40.0;
+  if (keyCode === LEFT_ARROW) {
+    centerPosition[0] += d;
+  } else if (keyCode === RIGHT_ARROW) {
+    centerPosition[0] -= d;
+  } else if (keyCode === UP_ARROW) {
+    centerPosition[1] -= d;
+  } else if (keyCode === DOWN_ARROW) {
+    centerPosition[1] += d;
+  }
+  if (key === '+') {
+    zoomRatio *= 1.2;
+  } else if (key === '-') {
+    zoomRatio /= 1.2;
+    if (zoomRatio < 1.0) zoomRatio = 1.0;
+  }
 }
