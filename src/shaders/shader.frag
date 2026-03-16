@@ -11,6 +11,9 @@ uniform float r;
 // Canvas resolution in pixels
 uniform vec2 resolution;
 
+// Rotation angle in radians
+uniform float rotation;
+
 void main() {
 
   // -------------------------------------------------------
@@ -29,8 +32,21 @@ void main() {
   // -------------------------------------------------------
   float aspect = resolution.x / resolution.y;
   vec2 uv = (snapped / resolution) - 0.5;  // range [-0.5 , 0.5]
-  float a = p.x + uv.x * 2.0 * r * aspect;
-  float b = p.y + uv.y * 2.0 * r;
+
+  // -------------------------------------------------------
+  // APPLY ROTATION
+  // Rotate the UV coordinates around the view centre so the
+  // entire complex-plane window spins in place.
+  // -------------------------------------------------------
+  float cosR = cos(rotation);
+  float sinR = sin(rotation);
+  vec2 rotatedUV = vec2(
+    uv.x * cosR - uv.y * sinR,
+    uv.x * sinR + uv.y * cosR
+  );
+
+  float a = p.x + rotatedUV.x * 2.0 * r * aspect;
+  float b = p.y + rotatedUV.y * 2.0 * r;
 
   // -------------------------------------------------------
   // ITERATE  z -> z^4 + c  (the original formula, degree 4)
