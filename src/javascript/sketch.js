@@ -69,7 +69,15 @@ function draw() {
   centerPosition[0] += (targetCenterPosition[0] - centerPosition[0]) * panEasing;
   centerPosition[1] += (targetCenterPosition[1] - centerPosition[1]) * panEasing;
 
-  mandel.setUniform('p', centerPosition);
+  // Split centre coordinates into hi+lo float32 pairs (df64) so the shader
+  // can reconstruct ~48 bits of precision, enabling zoom depths up to ~10^13.
+  let re_hi = Math.fround(centerPosition[0]);
+  let re_lo = Math.fround(centerPosition[0] - re_hi);
+  let im_hi = Math.fround(centerPosition[1]);
+  let im_lo = Math.fround(centerPosition[1] - im_hi);
+
+  mandel.setUniform('p_re', [re_hi, re_lo]);
+  mandel.setUniform('p_im', [im_hi, im_lo]);
   mandel.setUniform('r', 1.5 / zoomRatio);
   mandel.setUniform('resolution', [width, height]);
   mandel.setUniform('rotation', rotationAngle);
