@@ -4,7 +4,7 @@ precision highp float;
 
 // View centre stored as double-float pairs (hi + lo) for deep zoom precision.
 // Together they provide ~48 bits of mantissa, supporting zoom levels up to ~10^13.
-uniform vec2 p_re;     // real part: x=hi, y=lo
+uniform vec2 p_re;     // real part:      x=hi, y=lo
 uniform vec2 p_im;     // imaginary part: x=hi, y=lo
 
 // Half-height of view in imaginary units (1.5 / zoomRatio)
@@ -18,9 +18,7 @@ uniform float rotation;
 
 // -------------------------------------------------------
 // DOUBLE-FLOAT ARITHMETIC (Knuth TwoSum)
-// Adds a double-float a=(hi,lo) and a single float b,
-// returning a double-float result.  Captures the rounding
-// error so the low word stays accurate at deep zoom.
+// Adds a double-float a=(hi,lo) and a single float b.
 // -------------------------------------------------------
 vec2 df_add(vec2 a, float b) {
   float s = a.x + b;
@@ -28,78 +26,77 @@ vec2 df_add(vec2 a, float b) {
   return vec2(s, a.y + e);
 }
 
+// -------------------------------------------------------
+// MANDELBROT ITERATION  z -> z^4 + c
+//
+// Re( (zr + zi·i)^4 ) = zr^4 - 6·zr^2·zi^2 + zi^4
+// Im( (zr + zi·i)^4 ) = 4·zr^3·zi - 4·zr·zi^3
+//
+// Returns 1.0 if c is in the set, 0.0 if it escaped.
+// -------------------------------------------------------
+float iterate(float a, float b) {
+  float zr = 0.0;
+  float zi = 0.0;
+  for (int i = 0; i < 128; i++) {
+    float zr2 = zr * zr;
+    float zi2 = zi * zi;
+    if (zr2 + zi2 > 4.0) return 0.0;
+    float nr = zr2*zr2 - 6.0*zr2*zi2 + zi2*zi2 + a;
+    float ni = 4.0*zr2*zr*zi - 4.0*zr*zi2*zi  + b;
+    zr = nr;
+    zi = ni;
+  }
+  return 1.0;
+}
+
+// -------------------------------------------------------
+// MAP A SCREEN PIXEL -> COMPLEX PLANE -> IN-SET TEST
+// Uses df64 for the centre coordinate so deep zooms stay
+// sharp.  cosR/sinR are pre-computed in main().
+// -------------------------------------------------------
+float sampleAt(vec2 px, float aspect, float cosR, float sinR) {
+  vec2 uv = px / resolution - 0.5;
+  vec2 rotUV = vec2(uv.x * cosR - uv.y * sinR,
+                    uv.x * sinR + uv.y * cosR);
+  vec2 cre = df_add(p_re, rotUV.x * 2.0 * r * aspect);
+  vec2 cim = df_add(p_im, rotUV.y * 2.0 * r);
+  return iterate(cre.x + cre.y, cim.x + cim.y);
+}
+
 void main() {
 
   // -------------------------------------------------------
   // DISCRETE BLOCK AESTHETIC
-  // Snap each fragment to the nearest 8x8 pixel cell centre.
+  // All fragments in a GRID×GRID cell share the same block
+  // origin; we sample within that block, not outside it.
   // -------------------------------------------------------
   float GRID = 8.0;
-  vec2 snapped = floor(gl_FragCoord.xy / GRID) * GRID + GRID * 0.5;
+  vec2 orig = floor(gl_FragCoord.xy / GRID) * GRID;
 
-  // -------------------------------------------------------
-  // MAP PIXEL -> COMPLEX PLANE
-  // -------------------------------------------------------
   float aspect = resolution.x / resolution.y;
-  vec2 uv = (snapped / resolution) - 0.5;
+  float cosR   = cos(rotation);
+  float sinR   = sin(rotation);
 
   // -------------------------------------------------------
-  // APPLY ROTATION
-  // -------------------------------------------------------
-  float cosR = cos(rotation);
-  float sinR = sin(rotation);
-  vec2 rotatedUV = vec2(
-    uv.x * cosR - uv.y * sinR,
-    uv.x * sinR + uv.y * cosR
-  );
-
-  // -------------------------------------------------------
-  // COMPUTE c = p + pixel_offset  WITH EXTENDED PRECISION
-  // The pixel offset is a regular float; adding it to the
-  // df64 centre preserves all significant bits so the image
-  // stays sharp far beyond single-float zoom limits.
-  // -------------------------------------------------------
-  float offset_re = rotatedUV.x * 2.0 * r * aspect;
-  float offset_im = rotatedUV.y * 2.0 * r;
-
-  vec2 c_re = df_add(p_re, offset_re);
-  vec2 c_im = df_add(p_im, offset_im);
-
-  float a = c_re.x + c_re.y;
-  float b = c_im.x + c_im.y;
-
-  // -------------------------------------------------------
-  // ITERATE  z -> z^4 + c
+  // 2×2 SUPER-SAMPLE  (quadrant centres of the block)
   //
-  // Re( (zr + zi*i)^4 ) = zr^4 - 6*zr^2*zi^2 + zi^4
-  // Im( (zr + zi*i)^4 ) = 4*zr^3*zi   - 4*zr*zi^3
-  //
-  // 256 iterations gives meaningful detail at deep zoom.
+  // Single-point sampling lets boundary blocks be decided
+  // by one lucky/unlucky pixel, producing scattered noise.
+  // Sampling all four quadrant centres and using a majority
+  // vote (≥ 2 of 4 inside → black) makes each block's colour
+  // proportional to how much of its area lies inside the set,
+  // giving a faithful shape with a clean blocky aesthetic.
   // -------------------------------------------------------
-  float zr = 0.0;
-  float zi = 0.0;
-  float inSet = 1.0;
-
-  for (int i = 0; i < 256; i++) {
-    float zr2 = zr * zr;
-    float zi2 = zi * zi;
-
-    if (zr2 + zi2 > 4.0) {
-      inSet = 0.0;
-      break;
-    }
-
-    float new_zr = zr2*zr2 - 6.0*zr2*zi2 + zi2*zi2 + a;
-    float new_zi = 4.0*zr2*zr*zi - 4.0*zr*zi2*zi  + b;
-
-    zr = new_zr;
-    zi = new_zi;
-  }
+  float s = sampleAt(orig + vec2(GRID * 0.25, GRID * 0.25), aspect, cosR, sinR)
+          + sampleAt(orig + vec2(GRID * 0.75, GRID * 0.25), aspect, cosR, sinR)
+          + sampleAt(orig + vec2(GRID * 0.25, GRID * 0.75), aspect, cosR, sinR)
+          + sampleAt(orig + vec2(GRID * 0.75, GRID * 0.75), aspect, cosR, sinR);
 
   // -------------------------------------------------------
-  // COLOUR: in the set -> black.   Outside -> white.
+  // COLOUR
+  // Majority vote: ≥ 2 quadrants inside → black block.
   // -------------------------------------------------------
-  if (inSet > 0.5) {
+  if (s >= 2.0) {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
   } else {
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
